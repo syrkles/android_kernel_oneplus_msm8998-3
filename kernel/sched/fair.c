@@ -7713,9 +7713,17 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 		 * utilization to be synced, and we need that for energy
 		 * aware wakeups
 		 */
-		int _wake_cap = wake_cap(p, cpu, prev_cpu);
-		want_affine = !wake_wide(p) && !_wake_cap
-			      && cpumask_test_cpu(cpu, tsk_cpus_allowed(p));
+		if (cpumask_test_cpu(cpu, tsk_cpus_allowed(p))) {
+			int _wake_cap = wake_cap(p, cpu, prev_cpu);
+			bool about_to_idle = (cpu_rq(cpu)->nr_running < 2);
+			/*
+			 * note that sync flag takes precedence over wake_wide
+			 */
+			if (sysctl_sched_sync_hint_enable && sync &&
+			    !_wake_cap && about_to_idle)
+				return cpu;
+			want_affine = !wake_wide(p) && !_wake_cap;
+		}
 	}
 
 	if (energy_aware() && !(cpu_rq(prev_cpu)->rd->overutilized))
