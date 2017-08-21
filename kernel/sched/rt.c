@@ -1478,6 +1478,8 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	if (!task_current(rq, p) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_task(rq, p);
 
+	*per_cpu_ptr(&incoming_rt_task, cpu_of(rq)) = false;
+
 	if (!schedtune_task_boost(p))
 		return;
 
@@ -1616,33 +1618,6 @@ task_may_not_preempt(struct task_struct *task, int cpu)
 		(task == cpu_ksoftirqd || is_idle_task(task) ||
 		 (task_thread_info(task)->preempt_count
 		     & (HARDIRQ_MASK | SOFTIRQ_MASK))));
-}
-
-/*
- * Perform a schedtune dequeue and cancelation of boost timers if needed.
- * Should be called only with the rq->lock held.
- */
-static void schedtune_dequeue_rt(struct rq *rq, struct task_struct *p)
-{
-	struct sched_rt_entity *rt_se = &p->rt;
-
-	BUG_ON(!raw_spin_is_locked(&rq->lock));
-
-	if (!rt_se->schedtune_enqueued)
-		return;
-
-	/*
-	 * Incase of class change cancel any active timers. If an enqueued
-	 * timer was cancelled, put the task ref.
-	 */
-	if (hrtimer_try_to_cancel(&rt_se->schedtune_timer) == 1)
-		put_task_struct(p);
-
-	/* schedtune_enqueued is true, deboost it */
-	rt_se->schedtune_enqueued = false;
-	schedtune_dequeue_task(p, task_cpu(p));
-	sched_rt_update_capacity_req(rq);
-	cpufreq_update_this_cpu(rq, SCHED_CPUFREQ_RT);
 }
 
 /*
